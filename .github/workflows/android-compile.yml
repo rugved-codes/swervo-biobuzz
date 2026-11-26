@@ -1,0 +1,26 @@
+name: FTC Android compile
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out robot code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Compile FTC TeamCode
+        run: ./gradlew :TeamCode:compileDebugJavaWithJavac --no-daemon
