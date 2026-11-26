@@ -76,152 +76,4 @@ public class BioBuzzLeaveParkAuto extends LinearOpMode {
             telemetry.addLine(!clearedWall
                     ? "Wall-clear move timed out; robot stopped for safety."
                     : parked ? "Shot and drive complete: returned to configured X target."
-                    : "Wall cleared; return move timed out. Check Pinpoint calibration.");
-            showPoseAndTags();
-            telemetry.update();
-
-            // Keep vision diagnostics visible until the end of the autonomous period.
-            while (opModeIsActive() && matchTimer.seconds() < 29.5) {
-                robot.pinpointSubsystem.update();
-                showPoseAndTags();
-                telemetry.addData("AUTO time", "%.1f s", matchTimer.seconds());
-                telemetry.update();
-                sleep(50);
-            }
-        } finally {
-            if (robot.driveSubsystem != null) robot.driveSubsystem.stop();
-            if (intake != null) intake.stop();
-            if (shooter != null) shooter.stop();
-            if (visionPortal != null) visionPortal.close();
-        }
-    }
-
-    /** Briefly spins both shooter motors, then feeds the preloaded scoring elements. */
-    private void firePreloadBurst() {
-        ElapsedTime burstTimer = new ElapsedTime();
-        shooter.setShooting(true);
-        while (opModeIsActive() && burstTimer.seconds() < SHOOTER_SPINUP_SECONDS) {
-            telemetry.addLine("AUTO: spinning both shooters");
-            showPoseAndTags();
-            telemetry.update();
-            sleep(20);
-        }
-
-        if (opModeIsActive()) {
-            intake.intakeIn();
-            while (opModeIsActive() && burstTimer.seconds() < SHOOTER_FEED_END_SECONDS) {
-                telemetry.addLine("AUTO: feeding preload into upward-facing CELL");
-                showPoseAndTags();
-                telemetry.update();
-                sleep(20);
-            }
-        }
-
-        intake.stop();
-        shooter.stop();
-    }
-
-    private void initializeVision() {
-        try {
-            WebcamName webcam = hardwareMap.get(WebcamName.class, RobotHardware.WEBCAM_NAME);
-            aprilTagProcessor = AprilTagProcessor.easyCreateWithDefaults();
-            visionPortal = new VisionPortal.Builder()
-                    .setCamera(webcam)
-                    .addProcessor(aprilTagProcessor)
-                    .build();
-        } catch (RuntimeException cameraError) {
-            // Vision reports field-tag observations; Pinpoint runs the route independently.
-            telemetry.addData("Webcam", "Unavailable: %s", cameraError.getMessage());
-        }
-    }
-
-    /** Closed-loop translation with Pinpoint position and heading feedback. */
-    private boolean driveToX(double targetXInches, double timeoutSeconds) {
-        ElapsedTime stepTimer = new ElapsedTime();
-        while (opModeIsActive() && stepTimer.seconds() < timeoutSeconds) {
-            robot.pinpointSubsystem.update();
-            Pose2D pose = robot.pinpointSubsystem.getPose();
-            double x = pose.getX(DistanceUnit.INCH);
-            double y = pose.getY(DistanceUnit.INCH);
-            double heading = pose.getHeading(org.firstinspires.ftc.robotcore.external.navigation.AngleUnit.RADIANS);
-            double error = targetXInches - x;
-
-            if (Math.abs(error) <= POSITION_TOLERANCE_IN) {
-                robot.driveSubsystem.stop();
-                return true;
-            }
-
-            // Pinpoint X is forward and Y is left when heading is zero.
-            double fieldForward = Range.clip(error * 0.06,
-                    -MAX_TRANSLATION_POWER, MAX_TRANSLATION_POWER);
-            if (Math.abs(fieldForward) < MIN_TRANSLATION_POWER) {
-                fieldForward = Math.copySign(MIN_TRANSLATION_POWER, error);
-            }
-            double fieldLeft = Range.clip(-y * 0.04,
-                    -MAX_TRANSLATION_POWER, MAX_TRANSLATION_POWER);
-
-            // Convert field-axis error into robot-centric mecanum commands.
-            double axial = fieldForward * Math.cos(heading) + fieldLeft * Math.sin(heading);
-            double lateral = -fieldForward * Math.sin(heading) + fieldLeft * Math.cos(heading);
-            double yaw = Range.clip(-heading * HEADING_KP, -0.25, 0.25);
-            robot.driveSubsystem.drive(axial, lateral, yaw);
-
-            telemetry.addData("Target X", "%.1f in", targetXInches);
-            telemetry.addData("Pose", "x %.1f, y %.1f in, heading %.1f deg",
-                    x, y, Math.toDegrees(heading));
-            telemetry.addData("Move time", "%.1f / %.1f s", stepTimer.seconds(), timeoutSeconds);
-            showTags();
-            telemetry.update();
-            idle();
-        }
-        robot.driveSubsystem.stop();
-        return false;
-    }
-
-    private void showPoseAndTags() {
-        robot.pinpointSubsystem.update();
-        Pose2D pose = robot.pinpointSubsystem.getPose();
-        telemetry.addData("Pinpoint", "x %.1f, y %.1f in, heading %.1f deg",
-                pose.getX(DistanceUnit.INCH), pose.getY(DistanceUnit.INCH),
-                pose.getHeading(org.firstinspires.ftc.robotcore.external.navigation.AngleUnit.DEGREES));
-        telemetry.addData("Camera", visionPortal == null
-                ? "not streaming" : visionPortal.getCameraState());
-        showTags();
-    }
-
-    private void showTags() {
-        if (aprilTagProcessor == null) {
-            telemetry.addData("AprilTags", "camera unavailable");
-            return;
-        }
-        List<AprilTagDetection> detections = aprilTagProcessor.getDetections();
-        if (detections.isEmpty()) {
-            telemetry.addData("AprilTags", "none visible (camera should look toward floor tags)");
-            return;
-        }
-        int count = Math.min(detections.size(), 6);
-        for (int i = 0; i < count; i++) {
-            AprilTagDetection detection = detections.get(i);
-            String label = bioBuzzTagLocation(detection.id);
-            if (detection.ftcPose != null) {
-                telemetry.addData("AprilTag " + detection.id,
-                        "%s | range %.1f in, bearing %.1f deg",
-                        label, detection.ftcPose.range, detection.ftcPose.bearing);
-            } else {
-                telemetry.addData("AprilTag " + detection.id, "%s | ID only", label);
-            }
-        }
-        if (detections.size() > count) {
-            telemetry.addData("AprilTags", "%d more visible", detections.size() - count);
-        }
-    }
-
-    /** BIOBUZZ field tag ranges from the current FIRST competition manual. */
-    private static String bioBuzzTagLocation(int id) {
-        if (id >= 30 && id <= 33) return "red far-side CELL";
-        if (id >= 34 && id <= 37) return "red audience-side CELL";
-        if (id >= 38 && id <= 41) return "blue audience-side CELL";
-        if (id >= 42 && id <= 45) return "blue far-side CELL";
-        return "tag outside BIOBUZZ field IDs 30-45";
-    }
-}
+                    : "Wall-ôç»h‘éì¶»§q«^tÁ½ÉÐµ…À°Ý¡¥ ¥ÌÍÑ½É•¥¸Ñ¡”É½‰½ÐÌÉ¥Ù•ÈMÑ…Ñ¥½¸½¹™¥ÕÉ…Ñ¥½¸…¹µÕÍÐ‰”µ…Ñ¡•Ñ¼Ñ¡”Ý¥É¥¹œ½¸Ñ¡”…ÑÕ…°É½‰½Ð¸4(4)ð•Ù¥”ðQ‘•Ù¥”ÑåÁ”ð½¹™¥ÕÉ…Ñ¥½¸¹…µ”ð4)ð€´´´ð€´´´ð€´´´ð4)ðÉ½¹Ðµ±•™Ð‘É¥Ù”µ½Ñ½Èð5½Ñ½Éàð™É½¹Ñ1•™Ñ€ð4)ðÉ½¹ÐµÉ¥¡Ð‘É¥Ù”µ½Ñ½Èð5½Ñ½Éàð™É½¹ÑI¥¡Ñ€ð4)ð	…¬µ±•™Ð‘É¥Ù”µ½Ñ½Èð5½Ñ½Éàð‰…­1•™Ñ€ð4)ð	…¬µÉ¥¡Ð‘É¥Ù”µ½Ñ½Èð5½Ñ½Éàð‰…­I¥¡Ñ€ð4)ð½	%1A¥¹Á½¥¹Ð½‘½µ•ÑÉä½µÁÕÑ•Èð½	¥±‘…A¥¹Á½¥¹ÑÉ¥Ù•ÈðÁ¥¹Á½¥¹Ñ€ð4)ð1½¥Ñ• UMÝ•‰…´ð]•‰…µ9…µ”ð…µ•É…€ð4)ðIÕ‰‰•Èµ‰…¹¥¹Ñ…­”µ½Ñ½Èð5½Ñ½Éàð¥¹Ñ…­•€ð4)ð1•™ÐÍ¡½½Ñ•Èµ½Ñ½Èð5½Ñ½ÉàðÍ¡½½Ñ•É1•™Ñ€ð4)ðI¥¡ÐÍ¡½½Ñ•Èµ½Ñ½Èð5½Ñ½ÉàðÍ¡½½Ñ•ÉI¥¡Ñ€ð4(4)½¹™¥ÕÉ”Ñ¡”™½ÕÈµ½Ñ½È¹…µ•Ì……¥¹ÍÐÑ¡”Á½ÉÑÌ…ÑÕ…±±äÕÍ•‰äÑ¡”É½‰½Ð¸½¹¹•ÐÑ¡”ÑÝ¼½‘½µ•ÑÉäÁ½‘ÌÑ¼Ñ¡”A¥¹Á½¥¹ÐÌ`€¡™½ÉÝ…É¤…¹d€¡±•™Ð½ÍÑÉ…™”¤•¹½‘•È¥¹ÁÕÑÌ¸%¸A¥¹Á½¥¹ÑMÕ‰ÍåÍÑ•´¹©…Ù…€°µ•…ÍÕÉ”…¹Í•ÐÑ¡”Á½½™™Í•ÑÌ™É½´Ñ¡”É½‰½ÐÌÑÉ…­¥¹œ•¹Ñ•È°Ù•É¥™äÁ½‘¥É•Ñ¥½¹Ì°…¹Í•±•ÐÑ¡”¥¹ÍÑ…±±•½	%1Á½ÑåÁ”¸Q¡”ÕÉÉ•¹Ðé•É¼½™™Í•ÑÌ…¹™½ÉÝ…É‘¥É•Ñ¥½¹Ì…É”Á±…•¡½±‘•ÉÌ°Í¼±½…±¥é…Ñ¥½¸µÕÍÐ‰”…±¥‰É…Ñ•‰•™½É”ÉÕ¹¹¥¹œÑ¡¥Ì…ÕÑ½¹½µ½ÕÌ¸Q¡”É½‰½ÐµÕÍÐÉ•µ…¥¸ÍÑ¥±°‘ÕÉ¥¹œA¥¹Á½¥¹Ð%5T…±¥‰É…Ñ¥½¸¸4(4(ŒŒŒ%¹Ñ…­”…¹ÑÝ¼µµ½Ñ½ÈÍ¡½½Ñ•ÈÝ¥É¥¹œ…¹½Á•É…Ñ¥½¸4(4)Q¡”™½ÕÈ‘É¥Ù•ÑÉ…¥¸µ½Ñ½ÉÌÕÍ”…±°™½ÕÈµ½Ñ½ÈÁ½ÉÑÌ½¸Ñ¡”IX½¹ÑÉ½°!Õˆ¸Q¡”¥¹Ñ…­”…¹ÑÝ¼Í¡½½Ñ•Èµ½Ñ½ÉÌ¹••Ñ¡É•”µ½É”µ½Ñ½ÈÁ½ÉÑÌ°Í¼½¹¹•Ð„IXáÁ…¹Í¥½¸!ÕˆÑ¼Ñ¡”½¹ÑÉ½°!Õˆ¸%˜¥ÑÌÁ½ÉÑÌ…É”™É•”°ÕÍ”áÁ…¹Í¥½¸!ÕˆÁ½ÉÐ€À™½ÈÑ¡”¥¹Ñ…­”°Á½ÉÐ€Ä™½ÈÑ¡”±•™ÐÍ¡½½Ñ•È°…¹Á½ÉÐ€È™½ÈÑ¡”É¥¡ÐÍ¡½½Ñ•È¸%¸É¥Ù•ÈMÑ…Ñ¥½¸I½‰½Ð½¹™¥ÕÉ…Ñ¥½¸°Í•ÐÑ¡½Í”µ½Ñ½ÈÁ½ÉÑÌÑ¼Ñ¡”•á…Ð¹…µ•Ì¥¸Ñ¡”Ñ…‰±”¸Q¡•Í”¹…µ•Ì…É”Í½™ÑÝ…É”±…‰•±ÌìÑ¡”Á½ÉÐ…ÍÍ¥¹µ•¹ÐµÕÍÐµ…Ñ Ñ¡”Á¡åÍ¥…°Ý¥É¥¹œ¸Q¡”É½‰½Ð¡…Ì¹¼Í½ÉÑ•È½¹™¥ÕÉ•½È½¹ÑÉ½±±•‰äÑ¡¥Ì½‘”¸4(4)%¸Q•±•=Á5…¥¹€°…µ•Á…€ÈÌ€¨©É¥¡Ð‰ÕµÁ•È¨¨ÉÕ¹Ì‰½Ñ Í¡½½Ñ•Èµ½Ñ½ÉÌ¸€¨©`¨¨ÉÕ¹Ì½¹±äÑ¡”±•™Ðµ½Ñ½È…¹€¨©¨¨ÉÕ¹Ì½¹±äÑ¡”É¥¡Ðµ½Ñ½È™½ÈÍ•Á…É…Ñ”¡•­Ì¸€¨©1•™Ð‰ÕµÁ•È¨¨ÉÕ¹ÌÑ¡”¥¹Ñ…­”¥¹Ý…Éì€¨©µÁ…‘½Ý¸¨¨É•Ù•ÉÍ•Ì¥Ð¸I•±•…Í¥¹œÑ¡”½¹ÑÉ½±ÌÍÑ½ÁÌÑ¡”µ½Ñ½ÉÌ¸Q¡”µ½Ñ½ÈÁ½Ý•È…¹‘¥É•Ñ¥½¸Ù…±Õ•Ì…É”ÍÑ…ÉÑ¥¹œÁ½¥¹ÑÌè­••ÀÑ¡”É½‰½ÐÍ•ÕÉ•…¹¡…¹‘Ì±•…ÈÝ¡¥±”¡•­¥¹œÉ½±±•È‘¥É•Ñ¥½¸…Ð±½ÜÁ½Ý•È°Ñ¡•¸ÑÕ¹”M!==Q}A=]I€…¹Ñ¡”‘¥É•Ñ¥½¹Ì¥¸Ñ¡”ÍÕ‰ÍåÍÑ•´½‘”¸4(4)	%=	UihÁÉ¥±Q…Ì…É”%Ì€ÌÃŠLÐÔ™É½´Ñ¡”€ÌÙ ÄÄ™…µ¥±ä…¹…É”µ½Õ¹Ñ•Õ¹‘•ÈÑ¡”11L™…¥¹œ‘½Ý¸Ñ½Ý…ÉÑ¡”™±½½È¸Q¡”…µ•É„¹••‘Ì„±•…È°‘½Ý¹Ý…ÉÙ¥•Ü½˜Ñ¡”Ñ…Ì™½È‘•Ñ•Ñ¥½¸¸Q¡”…ÕÑ½¹½µ½ÕÌÉ•Á½ÉÑÌÑ¡”½™™¥¥…°Ñ…œÉ½ÕÀ€¡É•½‰±Õ”…¹…Õ‘¥•¹”½™…ÈÍ¥‘”¤°‰ÕÐ‘½•Ì¹½ÐÕÍ”Ñ¡”‘•Ñ•Ñ¥½¹ÌÑ¼…¥´½È¡…¹”¥ÑÌÁ…Ñ ¸Y•É¥™ä‘•Ñ•Ñ¥½¸Ý¥Ñ Ñ¡”M]IY<ÁÉ¥±Q…œY¥Í¥½¸Q•ÍÑ€=Á5½‘”‰•™½É”„µ…Ñ ¸M•”Ñ¡”mÕÉÉ•¹Ð%IMP	%=	Uihµ…¹Õ…±t¡¡ÑÑÁÌè¼½™ÑŒµÉ•Í½ÕÉ•Ì¹™¥ÉÍÑ¥¹ÍÁ¥É•Ì¹½Éœ½™ÑŒ½…µ”½µ…¹Õ…°´Àä¤…¹m™¥•±É•Í½ÕÉ•Ít¡¡ÑÑÁÌè¼½™ÑŒµÉ•Í½ÕÉ•Ì¹™¥ÉÍÑ¥¹ÍÁ¥É•Ì¹½Éœ½™ÑŒ½™¥•±¤¸4(4(ŒŒŒ5…Ñ Í•ÑÕÀ4(4)A±…”Ñ¡”É½‰½Ð½¸¥ÑÌ…±±¥…¹”Í¥‘”Ñ½Õ¡¥¹œÑ¡”Á•É¥µ•Ñ•ÈÝ…±°°½ÕÑÍ¥‘”Ñ¡”1½…‘¥¹œi½¹”…¹±½Ý•ÈÍ½É¥¹œÙ½±Õµ”¸…”Ñ¡”É½‰½Ð…ÐÑ¡”ÕÁÝ…Éµ™…¥¹œ10™½ÈÑ¡”ÁÉ•±½…Í¡½Ð¸Q¡”ÕÉÉ•¹Ð`ôàµ¥¹ É•ÑÕÉ¸Ý…åÁ½¥¹Ð¥Ì¹½Ð…ÕÑ½µ…Ñ¥…±±ä½™™Í•Ð¥¹Ñ¼Ñ¡”1½…‘¥¹œi½¹”ì…±¥‰É…Ñ”Ñ¡”É½ÕÑ”Ñ¼Ñ¡”…ÑÕ…°ÍÑ…ÉÐ…¹1½…‘¥¹œi½¹”‰•™½É”É•±å¥¹œ½¸UQ<AI,¸Q¡”…µ•É„É•Á½ÉÑÌÙ¥Í¥‰±”Ñ…œ%Ì™½È‘¥…¹½Í¥Ì°‰ÕÐ‘½•Ì¹½ÐÍÑ••ÈÑ¡”É½‰½Ð¸4(4(´´´4(4(ŒŒƒÂ~N(MåÍÑ•´É¡¥Ñ•ÑÕÉ”€˜•Á…ÉÑµ•¹Ñ…°5…ÑÉ¥à4(4)Q¼•¹ÍÕÉ”‘•Ù•±½Áµ•¹Ð•™™¥¥•¹ä°É…Á¥ÁÉ½Ñ½ÑåÁ¥¹œ°…¹±•…¸Ù•ÉÍ¥½¸½¹ÑÉ½°°½ÕÈ½Á•É…Ñ¥½¹Ì…É”µ…¹…•Ù¥„„É¥¥€Ðµ‘•Á…ÉÑµ•¹Ðµ…ÑÉ¥à¸Q¡¥ÌÍÑÉÕÑÕÉ”¥Í½±…Ñ•ÌÑ…Í­ÌÑ¼•±¥µ¥¹…Ñ”½Ù•É±…ÁÁ¥¹œÉ•Á½Í¥Ñ½Éä‘É½ÁÌ‘ÕÉ¥¹œÉ•µ½Ñ”ÍÁÉ¥¹ÑÌè4(4)ð•Í¥¸ð5•¡…¹¥…°	Õ¥±ðÕÑ½¹½µ½ÕÌM½™ÑÝ…É”ð	ÕÍ¥¹•ÍÌ€˜=Á•É…Ñ¥½¹Ìð4)ð€è´´´ð€è´´´ð€è´´´ð€è´´´ð4)ðƒŠˆ1•…•Í¥¹•ÈðƒŠˆ	Õ¥±QÉ…¬1•…ðƒŠˆM½™ÑÝ…É”É¡¥Ñ•ÑÕÉ”1•…ðƒŠˆQ•…´…ÁÑ…¥¸€¼á•Œ¥É•Ñ½Èð4)ðƒŠˆ5•¡…¹¥Í´5½‘•±¥¹œðƒŠˆ¡…ÍÍ¥Ì…‰É¥…Ñ½ÈðƒŠˆ1•…MåÍÑ•µÌ•Ù•±½Á•ÈðƒŠˆ¥É•Ñ½È½˜	ÕÍ¥¹•ÍÌ€˜5•‘¥„ð4)ðƒŠˆMåÍÑ•µÌ%¹Ñ•É…Ñ¥½¸ðƒŠˆÍÍ•µ‰±äQ•¡¹¥¥…¸ðƒŠˆ)…Ù„½¹ÑÉ½±Ì¹¥¹••Èðð4)ðƒŠˆY¥Í¥½¸1…å½ÕÐAÉ•ÀðƒŠˆ!…É‘Ý…É”AÉ½Ñ½ÑåÁ•ÉÌðƒŠˆY¥Í¥½¸=ÁÑ¥µ¥é…Ñ¥½¸QÉ…¬ðð4(4(´´´4(4(ŒŒƒÂ~j˜•Ù=ÁÌè¥Ð	É…¹¡¥¹œAÉ½Ñ½½°4(4(€m™•…ÑÕÉ”½¥¹Ñ…­”µ±½¥t€´´´·Š^<´´´´·Š^<´´´´µqp4(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€qp€€¡AÕ±°I•ÅÕ•ÍÐ€˜A••ÈI•Ù¥•Ü¤4(€mµ…ÍÑ•Ét€´´´´´´´´´´´´´´´´´´´´´´´´´´´´´´´·Š^<´´´´´´´´´´´´´´´´´´´´´´´´´´´·Š^<´´ø€¡MÑ…‰±”½±…Í¡•¤4(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¼4(€m¡½Ñ™¥à½Í•¹Í½ÈµÁ…Ñ¡t€´´´´´´´´´´´´´´´´·Š^<¼€4(4(ŒŒŒ€Ä¸Q¡”½É”	É…¹ èµ…ÍÑ•É€4(4(¨€¨©MÑ…ÑÕÌè¨¨AÉ½Ñ•Ñ•¸¥É•ÐÁÕÍ¡•Ì…É”É•ÍÑÉ¥Ñ•Ù¥„½É…¹¥é…Ñ¥½¸ÉÕ±•Ì¸4(¨€¨©AÕÉÁ½Í”è¨¨½¹Ñ…¥¹ÌÑ¡”…‰Í½±ÕÑ”ÁÉ½‘ÕÑ¥½¸µÉ•…‘ä°Ù•É¥™¥•ÍÑ…‰±”½‘”¸Q¡”½‘”Í¥ÑÑ¥¹œ½¸Ñ¡”Á¡åÍ¥…°É½‰½Ð¥¸Ñ¡”±…ˆµÕÍÐ…±Ý…åÌµ…Ñ Ñ¡¥Ì‰É…¹ Á•É™•Ñ±ä¸4(4(ŒŒŒ€È¸%Í½±…Ñ•]½É­ÍÁ…”	É…¹¡•Ìè™•…ÑÕÉ”¼©€4(4(¨€¨©9…µ¥¹œMÑ…¹‘…Éè¨¨™•…ÑÕÉ”½µ•¡…¹¥Í´µ¹…µ•€€¡”¹œ¸°™•…ÑÕÉ”½‘É¥Ù”µµ•…¹Õµ€°™•…ÑÕÉ”½±¥™ÐµÁ¥‘€¤4(¨€¨©AÕÉÁ½Í”è¨¨]¡•É”…±°É•µ½Ñ”‘•Ù•±½Áµ•¹Ð¡…ÁÁ•¹Ì¸AÉ½É…µµ•ÉÌÝ½É¬½µÁ±•Ñ•±ä¥¹‘•Á•¹‘•¹Ñ±äÝ¥Ñ¡¥¸Ñ¡•¥È‘•Í¥¹…Ñ•ÍÕˆµ™½±‘•ÉÌ¸4(4(ŒŒŒ€Ì¸µ•É•¹ä5…¥¹Ñ•¹…¹”	É…¹¡•Ìè¡½Ñ™¥à¼©€4(4(¨€¨©9…µ¥¹œMÑ…¹‘…Éè¨¨¡½Ñ™¥à½¥ÍÍÕ”µ‘•ÍÉ¥ÁÑ¥½¹€€¡”¹œ¸°¡½Ñ™¥à½…µ•É„µ‘¥Í½¹¹•Ñ€¤4(¨€¨©AÕÉÁ½Í”è¨¨I•Í•ÉÙ•™½È½µÁ•Ñ¥Ñ¥½¸µ…Ñ µ‘…åÌ½ÈÉ¥Ñ¥…°±…ˆ‰±½­Ì¸UÍ•Ñ¼Á…Ñ …µ”µ‰É•…­¥¹œ•ÉÉ½ÉÌ¥¹ÍÑ…¹Ñ±ä½¸µÍ¥Ñ”¸4(4(ŒŒŒƒÂ~NtQ¡”AÕ±°I•ÅÕ•ÍÐ€¡AH¤€˜½‘”I•Ù¥•ÜAÉ½•‘ÕÉ”4(4)	•™½É”…¹ä½‘”¥Ìµ•É•™É½´„‘•Ù•±½Á•ÈÌ™•…ÑÕÉ”¼©€‰É…¹ ¥¹Ñ¼Ñ¡”µ…¥¸µ…ÍÑ•É€±¥¹”°Ñ¡”‘•Ù•±½Á•ÈµÕÍÐÍÕ‰µ¥Ð„™½Éµ…°AÕ±°I•ÅÕ•ÍÐ…¹Á…ÍÌÑ¡¥ÌÉ¥Ñ•É¥„è4(4(Ä¸€¨©1½…°AÉ”µ½µÁ¥±…Ñ¥½¸è¨¨Q¡”½‘”µÕÍÐ½µÁ¥±”Ý¥Ñ é•É¼•ÉÉ½ÉÌ½¸Ñ¡”‘•Ù•±½Á•ÈÌµ…¡¥¹”¸4(È¸€¨©½µÁ½¹•¹Ð5½‘Õ±…É¥Ñä¡•¬è¨¨¹ÍÕÉ”…±°ÕÍÑ½´½‘”±¥Ù•ÌÍÑÉ¥Ñ±ä¥¹Í¥‘”Q•…µ½‘”½ÍÉŒ½µ…¥¸½©…Ù„½½Éœ½™¥ÉÍÑ¥¹ÍÁ¥É•Ì½™ÑŒ½Ñ•…µ½‘”½mÍÕ‰ÍåÍÑ•µ}™½±‘•Éu€¸MÕ‰ÍåÍÑ•µÌµÕÍÐ¹½ÐÝÉ¥Ñ”‘¥É•Ðµ½Ñ½ÈÙ…±Õ•Ì¥¹Í¥‘”=Á5½‘•Ì¸4(Ì¸€¨©A••ÈI•Ù¥•Üè¨¨Ð±•…ÍÐ½¹”½Ñ¡•ÈÍ½™ÑÝ…É”ÑÉ…¬Ñ•…´µ•µ‰•È½ÈÑ¡”M½™ÑÝ…É”1•…µÕÍÐÉ•Ù¥•ÜÑ¡”±¥¹”µ‰äµ±¥¹”‘¥™™•É•¹•Ì€ ‰‘¥™˜ˆ¤½¸¥Ñ!Õˆ…¹…ÁÁÉ½Ù”Ñ¡”…É¡¥Ñ•ÑÕÉ”¸4(Ð¸€¨©½¹™±¥ÐI•Í½±ÕÑ¥½¸è¨¨%˜„µ•É”½¹™±¥Ð½ÕÉÌ‘Õ”Ñ¼Í¥µÕ±Ñ…¹•½ÕÌ•‘¥ÑÌ½¸±½‰…°™¥±•Ì€¡±¥­”½¹ÍÑ…¹ÑÌ¹©…Ù…€¤°‘•Ù•±½Á•ÉÌµÕÍÐµ••ÐÍå¹¡É½¹½ÕÍ±äÑ¼É•Í½±Ù”Ñ¡”±¥¹•Ì‰•™½É”™½É¥¹œÑ¡”µ•É”¸4(4(´´´4(4(ŒŒƒÂ~Jì1…ˆ•Á±½åµ•¹Ðè±…Í¡¥¹œÑ¡”IX½¹ÑÉ½°!Õˆ4(4)=¹”„AÕ±°I•ÅÕ•ÍÐ¥Ì…ÁÁÉ½Ù•…¹µ•É•¥¹Ñ¼µ…ÍÑ•É€°Ñ¡”Ñ•…´¥¸Ñ¡”±…ˆÁÕ±±ÌÑ¡”¡…¹•Ì…¹‘•Á±½åÌÑ¡•´‘¥É•Ñ±äÑ¼Ñ¡”É½‰½ÐÙ¥„¹‘É½¥MÑÕ‘¥¼ÕÍ¥¹œ½¹”½˜ÑÝ¼µ•Ñ¡½‘Ìè4(4(ŒŒŒ5•Ñ¡½èUMµA¡åÍ¥…°•Á±½ä€¡I•½µµ•¹‘•¤4(4(Ä¸½¹¹•Ð„UMµ‘…Ñ„Ñ•Ñ¡•È‘¥É•Ñ±ä™É½´Ñ¡”±…ˆÍÑ…Ñ¥½¸±…ÁÑ½ÀÑ¼Ñ¡”IX½¹ÑÉ½°!Õˆ¸4(È¸M•±•Ð€¨¨‰IX½¹ÑÉ½°!Õˆˆ¨¨™É½´Ñ¡”¹‘É½¥MÑÕ‘¥¼…Ñ¥Ù”‘•Ù¥”‘É½Á‘½Ý¸µ•¹Ô¸4(Ì¸±¥¬€¨©IÕ¸¨¨€¡M¡¥™Ð€¬ÄÁ€¤Ñ¼½µÁ¥±”Ñ¡”A,…¹¥¹ÍÑ…±°¥Ð‘¥É•Ñ±ä½¹Ñ¼Ñ¡”¡…É‘Ý…É”¸4(4(ŒŒŒ5•Ñ¡½è]¥É•±•ÍÌ•Á±½ä€¡¥•±QÉ…­¥¹œ¤4(4(Ä¸¹ÍÕÉ”Ñ¡”±…ÁÑ½À¥Ì½¹¹•Ñ•‘¥É•Ñ±äÑ¼Ñ¡”½¹ÑÉ½°!ÕˆÌ‰É½…‘…ÍÐ]¤µ¤¹•ÑÝ½É¬¸4(È¸á•ÕÑ”Ñ¡”‰É¥‘”±¥¹¬½µµ…¹¥¸Ñ¡”¹‘É½¥MÑÕ‘¥¼Ñ•Éµ¥¹…°è4(4)‰…Í 4)…‘ˆ½¹¹•Ð€ÄäÈ¸ÄØà¸ÐÌ¸ÄèÔÔÔÔ4(4)€4(4(Ì¸=¹”½¹¹•Ñ•°‘•Á±½äÝ¥É•±•ÍÍ±äÕÍ¥¹œÑ¡”Ñ½Àµ•¹ÔÑ½½±‰…È¸4(

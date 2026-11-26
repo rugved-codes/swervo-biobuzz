@@ -22,5 +22,8 @@ jobs:
           java-version: '17'
           cache: gradle
 
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
       - name: Compile FTC TeamCode
         run: ./gradlew :TeamCode:compileDebugJavaWithJavac --no-daemon
