@@ -21,7 +21,7 @@ Welcome to the official repository for FIRST Tech Challenge (FTC) Team 26256 (SW
 
 ## BIOBUZZ Autonomous: Leave + Park
 
-`BIOBUZZ Leave + Park` is a conservative 30-second autonomous for the currently documented mecanum drivetrain. It uses the goBILDA Pinpoint's two dead-wheel odometry and the Logitech webcam for AprilTag visibility telemetry. It drives 20 inches forward to clear the perimeter wall, then returns to an 8-inch relative offset so the robot remains partly inside the Loading Zone. The route targets the BIOBUZZ autonomous LEAVE (3 points) and PARK (5 points).
+`BIOBUZZ Leave + Park` is a conservative 30-second autonomous for the mecanum drivetrain. It uses the goBILDA Pinpoint's two dead-wheel odometry to drive 20 inches forward to clear the perimeter wall, then returns to an 8-inch relative offset. The Logitech webcam detects BIOBUZZ field AprilTags during INIT and AUTO and reports the tag IDs, field-cell group, range, and bearing. Tags are diagnostic only; the route does not steer from tags.
 
 The autonomous routine currently performs LEAVE and PARK only; it does not run the shooter or attempt HIVE TIP. Test the route at low speed on a clear field and tune travel distances to the built robot before competition.
 
@@ -37,15 +37,19 @@ These are the exact configuration names expected by the code. The repository doe
 | Back-right drive motor | DcMotorEx | `backRight` |
 | goBILDA Pinpoint odometry computer | GoBildaPinpointDriver | `pinpoint` |
 | Logitech USB webcam | WebcamName | `camera` |
-| Shooter flywheel motor | DcMotorEx | `shooter` |
+| Rubber-band intake motor | DcMotorEx | `intake` |
+| Left shooter motor | DcMotorEx | `shooterLeft` |
+| Right shooter motor | DcMotorEx | `shooterRight` |
 
 Configure the four motor names against the ports actually used by the robot. Connect the two odometry pods to the Pinpoint's X (forward) and Y (left/strafe) encoder inputs. In `PinpointSubsystem.java`, measure and set the pod offsets from the robot's tracking center, verify pod directions, and select the installed goBILDA pod type. The current zero offsets and forward directions are placeholders, so localization must be calibrated before running this autonomous. The robot must remain still during Pinpoint IMU calibration.
 
-### One-motor shooter wiring and operation
+### Intake and two-motor shooter wiring and operation
 
-The mecanum drivetrain already uses all four motor ports on a REV Control Hub. For a fifth motor, connect the shooter to a motor port on a REV Expansion Hub (suggested starting assignment: port 0, if free) and connect the Expansion Hub to the Control Hub using the REV-approved wiring. Do not try to connect a fifth motor to the Control Hub's four motor ports. In the Driver Station Robot Configuration, set that exact hub/port to a `DcMotor`/`DcMotorEx` named `shooter`. The code uses the configured name, not the numeric port, so update the DS config if the free port is different. The Control Hub's built-in motor encoder is used only if your motor has an encoder; this simple flywheel control does not require one.
+The four drivetrain motors use all four motor ports on the REV Control Hub. The intake and two shooter motors need three more motor ports, so connect a REV Expansion Hub to the Control Hub. If its ports are free, use Expansion Hub port 0 for the intake, port 1 for the left shooter, and port 2 for the right shooter. In Driver Station Robot Configuration, set those motor ports to the exact names in the table. These names are software labels; the port assignment must match the physical wiring. The robot has no sorter configured or controlled by this code.
 
-In `TeleOpMain`, hold gamepad 1's **right bumper** to run the shooter at 85% power; releasing it stops the motor. The current autonomous remains leave-and-park and does not shoot. The shooter direction and power are safe starting values only: with the robot secured and the flywheel clear, verify its rotation at low power before testing game pieces. Change `SHOOT_POWER` and the motor direction in `ShooterSubsystem.java` after a controlled test. A single flywheel motor also needs the robot's actual feed mechanism to deliver game pieces; this code does not invent a feeder or guarantee scoring.
+In `TeleOpMain`, gamepad 2's **right bumper** runs both shooter motors. **X** runs only the left motor and **B** runs only the right motor for separate checks. **Left bumper** runs the intake inward; **D-pad down** reverses it. Releasing the controls stops the motors. The motor power and direction values are starting points: keep the robot secured and hands clear while checking roller direction at low power, then tune `SHOOT_POWER` and the directions in the subsystem code. The autonomous currently does not run the intake or shooters.
+
+BIOBUZZ AprilTags are IDs 30–45 from the 36h11 family and are mounted under the CELLS facing down toward the floor. The camera needs a clear, downward view of the tags for detection. The autonomous reports the official tag group (red/blue and audience/far side), but does not use the detections to aim or change its path. Verify detection with the `SWERVO AprilTag Vision Test` OpMode before a match. See the [current FIRST BIOBUZZ manual](https://ftc-resources.firstinspires.org/ftc/game/manual-09) and [field resources](https://ftc-resources.firstinspires.org/ftc/field).
 
 ### Match setup
 

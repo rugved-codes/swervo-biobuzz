@@ -1,43 +1,47 @@
 package org.firstinspires.ftc.teamcode.subsystems;
 
+import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.HardwareMap;
-import com.qualcomm.robotcore.hardware.CRServo;
 
 /**
- * Intake subsystem controlled via a Spark Mini (PWM / Continuous Rotation Servo).
+ * One-motor rubber-band intake.
  */
 public class IntakeModule {
 
-    private CRServo intakeServo;
+    private DcMotorEx intakeMotor;
 
     // Power constants for intake states
-    private static final double INTAKE_IN_POWER = 1.0;   // Pull game pieces in
-    private static final double INTAKE_OUT_POWER = -1.0; // Spit game pieces out
-    private static final double INTAKE_STOP_POWER = 0.0; // Zero power stops a CRServo
+    private static final double INTAKE_IN_POWER = 0.75;
+    private static final double INTAKE_OUT_POWER = -0.50;
+    private static final double INTAKE_STOP_POWER = 0.0;
 
     public void init(HardwareMap hwMap) {
-        // Note: Spark Minis connected to PWM ports are mapped as Servos in FTC
-        intakeServo = hwMap.get(CRServo.class, RobotHardware.INTAKE_NAME);
+        intakeMotor = hwMap.get(DcMotorEx.class, RobotHardware.INTAKE_NAME);
+        intakeMotor.setDirection(DcMotor.Direction.FORWARD);
+        intakeMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        intakeMotor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+        intakeMotor.setPower(0.0);
     }
 
     /**
      * Spin the intake inward to grab elements.
      */
     public void intakeIn() {
-        intakeServo.setPower(INTAKE_IN_POWER);
+        intakeMotor.setPower(INTAKE_IN_POWER);
     }
 
     /**
      * Spit elements outward.
      */
     public void intakeOut() {
-        intakeServo.setPower(INTAKE_OUT_POWER);
+        intakeMotor.setPower(INTAKE_OUT_POWER);
     }
 
     /**
      * Stop the intake.
      */
     public void stop() {
-        intakeServo.setPower(INTAKE_STOP_POWER);
+        intakeMotor.setPower(INTAKE_STOP_POWER);
     }
 }

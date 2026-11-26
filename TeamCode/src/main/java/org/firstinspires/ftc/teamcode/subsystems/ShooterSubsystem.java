@@ -4,27 +4,41 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
-/** Single-motor shooter/flywheel. Hold the driver control while shooting. */
+/** Two independently controlled rubber-band shooter motors. */
 public final class ShooterSubsystem {
-    public static final String CONFIG_NAME = "shooter";
-    public static final double SHOOT_POWER = 0.85;
+    public static final String LEFT_CONFIG_NAME = "shooterLeft";
+    public static final String RIGHT_CONFIG_NAME = "shooterRight";
+    public static final double SHOOT_POWER = 0.70;
 
-    private final DcMotorEx motor;
+    private final DcMotorEx leftMotor;
+    private final DcMotorEx rightMotor;
 
     public ShooterSubsystem(HardwareMap hardwareMap) {
-        motor = hardwareMap.get(DcMotorEx.class, CONFIG_NAME);
-        // If the flywheel spins the wrong way, change this to REVERSE after a safe test.
-        motor.setDirection(DcMotor.Direction.FORWARD);
+        leftMotor = hardwareMap.get(DcMotorEx.class, LEFT_CONFIG_NAME);
+        rightMotor = hardwareMap.get(DcMotorEx.class, RIGHT_CONFIG_NAME);
+        configure(leftMotor, DcMotor.Direction.FORWARD);
+        // Mirrored rollers usually need opposite motor directions; verify on the built robot.
+        configure(rightMotor, DcMotor.Direction.REVERSE);
+    }
+
+    private static void configure(DcMotorEx motor, DcMotor.Direction direction) {
+        motor.setDirection(direction);
         motor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
         motor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
         motor.setPower(0.0);
     }
 
     public void setShooting(boolean enabled) {
-        motor.setPower(enabled ? SHOOT_POWER : 0.0);
+        setPowers(enabled ? SHOOT_POWER : 0.0, enabled ? SHOOT_POWER : 0.0);
+    }
+
+    /** Allows a driver to test either motor individually. */
+    public void setPowers(double leftPower, double rightPower) {
+        leftMotor.setPower(leftPower);
+        rightMotor.setPower(rightPower);
     }
 
     public void stop() {
-        motor.setPower(0.0);
+        setPowers(0.0, 0.0);
     }
 }

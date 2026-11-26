@@ -15,7 +15,7 @@ import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 import java.util.List;
 
 /**
- * Conservative BIOBUZZ autonomous for the currently documented drivetrain-only robot.
+ * Conservative BIOBUZZ autonomous for the documented mecanum and Pinpoint drivetrain.
  * Scores LEAVE, then returns to the alliance Loading Zone to score PARK.
  */
 @Autonomous(name = "BIOBUZZ Leave + Park", group = "BIOBUZZ")
@@ -149,14 +149,38 @@ public class BioBuzzLeaveParkAuto extends LinearOpMode {
     }
 
     private void showTags() {
-        if (aprilTagProcessor == null) return;
+        if (aprilTagProcessor == null) {
+            telemetry.addData("AprilTags", "camera unavailable");
+            return;
+        }
         List<AprilTagDetection> detections = aprilTagProcessor.getDetections();
-        StringBuilder ids = new StringBuilder();
+        if (detections.isEmpty()) {
+            telemetry.addData("AprilTags", "none visible (camera should look toward floor tags)");
+            return;
+        }
         int count = Math.min(detections.size(), 6);
         for (int i = 0; i < count; i++) {
-            if (i > 0) ids.append(", ");
-            ids.append(detections.get(i).id);
+            AprilTagDetection detection = detections.get(i);
+            String label = bioBuzzTagLocation(detection.id);
+            if (detection.ftcPose != null) {
+                telemetry.addData("AprilTag " + detection.id,
+                        "%s | range %.1f in, bearing %.1f deg",
+                        label, detection.ftcPose.range, detection.ftcPose.bearing);
+            } else {
+                telemetry.addData("AprilTag " + detection.id, "%s | ID only", label);
+            }
         }
-        telemetry.addData("AprilTags", detections.isEmpty() ? "none" : ids.toString());
+        if (detections.size() > count) {
+            telemetry.addData("AprilTags", "%d more visible", detections.size() - count);
+        }
+    }
+
+    /** BIOBUZZ field tag ranges from the current FIRST competition manual. */
+    private static String bioBuzzTagLocation(int id) {
+        if (id >= 30 && id <= 33) return "red far-side CELL";
+        if (id >= 34 && id <= 37) return "red audience-side CELL";
+        if (id >= 38 && id <= 41) return "blue audience-side CELL";
+        if (id >= 42 && id <= 45) return "blue far-side CELL";
+        return "tag outside BIOBUZZ field IDs 30-45";
     }
 }

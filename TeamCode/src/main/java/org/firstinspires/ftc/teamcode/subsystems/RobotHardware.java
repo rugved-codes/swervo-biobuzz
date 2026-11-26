@@ -3,7 +3,7 @@ package org.firstinspires.ftc.teamcode.subsystems;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
-/** Hardware configuration names used by the drivetrain-only BIOBUZZ autonomous. */
+/** Driver Station hardware configuration names for this BIOBUZZ robot. */
 public class RobotHardware {
     // These are Driver Station configuration names, not physical hub port numbers.
     public static final String FL_MOTOR = "frontLeft";
@@ -11,7 +11,8 @@ public class RobotHardware {
     public static final String BL_MOTOR = "backLeft";
     public static final String BR_MOTOR = "backRight";
     public static final String INTAKE_NAME = "intake";
-    public static final String SHOOTER_NAME = ShooterSubsystem.CONFIG_NAME;
+    public static final String SHOOTER_LEFT_NAME = ShooterSubsystem.LEFT_CONFIG_NAME;
+    public static final String SHOOTER_RIGHT_NAME = ShooterSubsystem.RIGHT_CONFIG_NAME;
     public static final String PINPOINT_NAME = "pinpoint";
     public static final String WEBCAM_NAME = "camera";
 
