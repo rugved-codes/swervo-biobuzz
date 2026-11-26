@@ -19,11 +19,11 @@
 
 Welcome to the official repository for FIRST Tech Challenge (FTC) Team 26256 (SWERVO) based out of Mississauga, Ontario. This repository manages our completely modular software architecture, sensor arrays, computer vision logic, and autonomous routines.
 
-## BIOBUZZ Autonomous: Leave + Park
+## BIOBUZZ Autonomous: Preload Shot + Leave
 
-`BIOBUZZ Leave + Park` is a conservative 30-second autonomous for the mecanum drivetrain. It uses the goBILDA Pinpoint's two dead-wheel odometry to drive 20 inches forward to clear the perimeter wall, then returns to an 8-inch relative offset. The Logitech webcam detects BIOBUZZ field AprilTags during INIT and AUTO and reports the tag IDs, field-cell group, range, and bearing. Tags are diagnostic only; the route does not steer from tags.
+`BIOBUZZ Preload Shot + Leave` spins up both shooter motors, feeds the four preloaded POLLEN with the intake for a timed burst, then clears the wall and returns to a configurable X position. The Logitech webcam detects BIOBUZZ field AprilTags during INIT and AUTO and reports tag IDs and field-cell group. Tags are diagnostic only; this route does not steer or aim from tags.
 
-The autonomous routine currently performs LEAVE and PARK only; it does not run the shooter or attempt HIVE TIP. Test the route at low speed on a clear field and tune travel distances to the built robot before competition.
+The autonomous shot fires forward from the starting pose. Under BIOBUZZ setup rules, place the robot on its alliance side touching the perimeter wall, outside the Loading Zone and Flower scoring volume, with the four preloaded POLLEN in the shooter feed path. Aim at the upward-facing CELL before selecting this OpMode. The 0.65-second spin-up and 2.0-second total feed window are starting values that must be tuned on the built robot. If no elements are loaded, the burst just spins the motors. Test with the robot secured, an adult supervising, and the field clear.
 
 ### Driver Station hardware configuration
 
@@ -47,13 +47,13 @@ Configure the four motor names against the ports actually used by the robot. Con
 
 The four drivetrain motors use all four motor ports on the REV Control Hub. The intake and two shooter motors need three more motor ports, so connect a REV Expansion Hub to the Control Hub. If its ports are free, use Expansion Hub port 0 for the intake, port 1 for the left shooter, and port 2 for the right shooter. In Driver Station Robot Configuration, set those motor ports to the exact names in the table. These names are software labels; the port assignment must match the physical wiring. The robot has no sorter configured or controlled by this code.
 
-In `TeleOpMain`, gamepad 2's **right bumper** runs both shooter motors. **X** runs only the left motor and **B** runs only the right motor for separate checks. **Left bumper** runs the intake inward; **D-pad down** reverses it. Releasing the controls stops the motors. The motor power and direction values are starting points: keep the robot secured and hands clear while checking roller direction at low power, then tune `SHOOT_POWER` and the directions in the subsystem code. The autonomous currently does not run the intake or shooters.
+In `TeleOpMain`, gamepad 2's **right bumper** runs both shooter motors. **X** runs only the left motor and **B** runs only the right motor for separate checks. **Left bumper** runs the intake inward; **D-pad down** reverses it. Releasing the controls stops the motors. The motor power and direction values are starting points: keep the robot secured and hands clear while checking roller direction at low power, then tune `SHOOT_POWER` and the directions in the subsystem code.
 
 BIOBUZZ AprilTags are IDs 30–45 from the 36h11 family and are mounted under the CELLS facing down toward the floor. The camera needs a clear, downward view of the tags for detection. The autonomous reports the official tag group (red/blue and audience/far side), but does not use the detections to aim or change its path. Verify detection with the `SWERVO AprilTag Vision Test` OpMode before a match. See the [current FIRST BIOBUZZ manual](https://ftc-resources.firstinspires.org/ftc/game/manual-09) and [field resources](https://ftc-resources.firstinspires.org/ftc/field).
 
 ### Match setup
 
-Place the robot touching its alliance wall inside that alliance's Loading Zone, facing straight into the field. The routine is alliance-independent because it drives forward and then retraces its path; it does not cross toward the opposite alliance. The webcam reports visible tag IDs for diagnosis, while this conservative routine does not use camera detections to steer.
+Place the robot on its alliance side touching the perimeter wall, outside the Loading Zone and Flower scoring volume. Face the robot at the upward-facing CELL for the preload shot. The current X=8-inch return waypoint is not automatically offset into the Loading Zone; calibrate the route to the actual start and Loading Zone before relying on AUTO PARK. The camera reports visible tag IDs for diagnosis, but does not steer the robot.
 
 ---
 

@@ -7,7 +7,9 @@ import com.qualcomm.robotcore.util.Range;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
+import org.firstinspires.ftc.teamcode.subsystems.IntakeModule;
 import org.firstinspires.ftc.teamcode.subsystems.RobotHardware;
+import org.firstinspires.ftc.teamcode.subsystems.ShooterSubsystem;
 import org.firstinspires.ftc.vision.VisionPortal;
 import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
 import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
@@ -15,10 +17,9 @@ import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 import java.util.List;
 
 /**
- * Conservative BIOBUZZ autonomous for the documented mecanum and Pinpoint drivetrain.
- * Scores LEAVE, then returns to the alliance Loading Zone to score PARK.
+ * Fires the four preloaded POLLEN, clears the wall, then drives to a tunable return point.
  */
-@Autonomous(name = "BIOBUZZ Leave + Park", group = "BIOBUZZ")
+@Autonomous(name = "BIOBUZZ Preload Shot + Leave", group = "BIOBUZZ")
 public class BioBuzzLeaveParkAuto extends LinearOpMode {
     // Relative Pinpoint targets, inches from the pose reset during INIT.
     private static final double CLEAR_WALL_IN = 20.0;
@@ -27,9 +28,14 @@ public class BioBuzzLeaveParkAuto extends LinearOpMode {
     private static final double MAX_TRANSLATION_POWER = 0.35;
     private static final double MIN_TRANSLATION_POWER = 0.12;
     private static final double HEADING_KP = 0.8;
+    // Starting values for the preload burst; tune on the real field.
+    private static final double SHOOTER_SPINUP_SECONDS = 0.65;
+    private static final double SHOOTER_FEED_END_SECONDS = 2.0;
 
     private final RobotHardware robot = new RobotHardware();
     private final ElapsedTime matchTimer = new ElapsedTime();
+    private ShooterSubsystem shooter;
+    private IntakeModule intake;
     private AprilTagProcessor aprilTagProcessor;
     private VisionPortal visionPortal;
 
@@ -37,11 +43,16 @@ public class BioBuzzLeaveParkAuto extends LinearOpMode {
     public void runOpMode() {
         try {
             robot.init(hardwareMap);
+            shooter = new ShooterSubsystem(hardwareMap);
+            intake = new IntakeModule();
+            intake.init(hardwareMap);
             initializeVision();
 
-            telemetry.addLine("BIOBUZZ: Leave + Park");
-            telemetry.addLine("Start in your alliance Loading Zone, touching its wall,");
-            telemetry.addLine("with the robot facing straight into the field.");
+            telemetry.addLine("BIOBUZZ: Preload Shot + Leave");
+            telemetry.addLine("Start on your alliance side, touching the wall, outside the Loading Zone.");
+            telemetry.addLine("Aim the robot at the upward-facing CELL.");
+            telemetry.addLine("Load the 4 preloaded POLLEN into the shooter feed path.");
+            telemetry.addLine("Auto fires a short burst, then clears the wall and returns to X=8 in.");
             telemetry.addLine("Pinpoint must be still while its IMU calibrates.");
             showPoseAndTags();
             telemetry.update();
@@ -50,10 +61,13 @@ public class BioBuzzLeaveParkAuto extends LinearOpMode {
             if (isStopRequested()) return;
 
             matchTimer.reset();
+            firePreloadBurst();
+            if (!opModeIsActive()) return;
+
             boolean clearedWall = driveToX(CLEAR_WALL_IN, 5.0);
             boolean parked = false;
             if (clearedWall && opModeIsActive()) {
-                // Return toward the start wall, stopping inside the 11-inch-deep Loading Zone.
+                // Return near the start wall. Calibrate this target for the actual Loading Zone.
                 parked = driveToX(PARK_OFFSET_IN, 5.0);
             }
 
@@ -61,7 +75,7 @@ public class BioBuzzLeaveParkAuto extends LinearOpMode {
             telemetry.addData("AUTO time", "%.1f s", matchTimer.seconds());
             telemetry.addLine(!clearedWall
                     ? "Wall-clear move timed out; robot stopped for safety."
-                    : parked ? "Route complete: clear wall and return to Loading Zone."
+                    : parked ? "Shot and drive complete: returned to configured X target."
                     : "Wall cleared; return move timed out. Check Pinpoint calibration.");
             showPoseAndTags();
             telemetry.update();
@@ -76,8 +90,35 @@ public class BioBuzzLeaveParkAuto extends LinearOpMode {
             }
         } finally {
             if (robot.driveSubsystem != null) robot.driveSubsystem.stop();
+            if (intake != null) intake.stop();
+            if (shooter != null) shooter.stop();
             if (visionPortal != null) visionPortal.close();
         }
+    }
+
+    /** Briefly spins both shooter motors, then feeds the preloaded scoring elements. */
+    private void firePreloadBurst() {
+        ElapsedTime burstTimer = new ElapsedTime();
+        shooter.setShooting(true);
+        while (opModeIsActive() && burstTimer.seconds() < SHOOTER_SPINUP_SECONDS) {
+            telemetry.addLine("AUTO: spinning both shooters");
+            showPoseAndTags();
+            telemetry.update();
+            sleep(20);
+        }
+
+        if (opModeIsActive()) {
+            intake.intakeIn();
+            while (opModeIsActive() && burstTimer.seconds() < SHOOTER_FEED_END_SECONDS) {
+                telemetry.addLine("AUTO: feeding preload into upward-facing CELL");
+                showPoseAndTags();
+                telemetry.update();
+                sleep(20);
+            }
+        }
+
+        intake.stop();
+        shooter.stop();
     }
 
     private void initializeVision() {
@@ -89,7 +130,7 @@ public class BioBuzzLeaveParkAuto extends LinearOpMode {
                     .addProcessor(aprilTagProcessor)
                     .build();
         } catch (RuntimeException cameraError) {
-            // Vision reports field-tag observations only; odometry safely runs this route alone.
+            // Vision reports field-tag observations; Pinpoint runs the route independently.
             telemetry.addData("Webcam", "Unavailable: %s", cameraError.getMessage());
         }
     }
